@@ -47,13 +47,9 @@ impl RoaringBitmap {
     /// ```
     pub fn insert(&mut self, value: u32) -> bool {
         let (key, index) = util::split(value);
-        let container = match self.containers.binary_search_by_key(&key, |c| c.key) {
-            Ok(loc) => &mut self.containers[loc],
-            Err(loc) => {
-                self.containers.insert(loc, Container::new(key));
-                &mut self.containers[loc]
-            }
-        };
+        let container_idx = self.find_container_by_key(key);
+        // Safe unwrap, we ensure the container exists in `find_container_by_key`.
+        let container = self.containers.get_mut(container_idx).unwrap();
         container.insert(index)
     }
 
@@ -62,6 +58,16 @@ impl RoaringBitmap {
     ///
     /// Return the index of the target container.
     fn find_container_by_key(&mut self, key: u16) -> usize {
+        // before the binary search, we optimize for frequent cases
+        let size = self.containers.len();
+        if size == 0 {
+            self.containers.push(Container::new(key));
+            return 0;
+        } else if self.containers[size - 1].key == key {
+            return size - 1;
+        }
+
+        // binary search
         match self.containers.binary_search_by_key(&key, |c| c.key) {
             Ok(loc) => loc,
             Err(loc) => {
